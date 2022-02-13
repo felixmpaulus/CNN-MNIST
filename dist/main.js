@@ -4,11 +4,46 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const cnn_1 = require("./cnn");
 main();
 function main() {
+    /*
+    
+    oo
+    xx
+    
+    xx
+    oo
+    
+    xo
+    xo
+    
+    ox
+    ox
+    
+    xo
+    ox
+    
+    ox
+    xo
+    
+    
+    
+    */
+    const testData = [
+        { input: [0, 0, 1, 1], label: 1 },
+        { input: [1, 1, 0, 0], label: 1 },
+        { input: [1, 0, 1, 0], label: 1 },
+        { input: [0, 1, 0, 1], label: 1 },
+        { input: [1, 0, 0, 1], label: 0 },
+        { input: [0, 1, 1, 0], label: 0 }
+    ];
     // const MNISTasJSON = convertMNISTtoJSON()
-    const MNISTCNN = new cnn_1.CNN(2, [3, 6], 2, 'ReLU');
-    const input = [{ value: 3 }, { value: 6 }];
-    const output = MNISTCNN.calculateOutput(input);
-    console.log('output: ' + JSON.stringify(output));
+    const MNISTCNN = new cnn_1.CNN(4, [4], 1, 'ReLU', 1);
+    testData.forEach((t) => {
+        const input = t.input.map((i) => ({ value: i }));
+        const output = MNISTCNN.calculateOutput(input);
+        console.log(output);
+    });
+    // const input: Layer = [{ value: 3 }, { value: 6 }]
+    // console.log('output: ' + JSON.stringify(output))
     // MNISTCNN.getWeights()
 }
 // function convertMNISTtoJSON() {

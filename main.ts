@@ -42,11 +42,12 @@ function main() {
     ]
 
     // const MNISTasJSON = convertMNISTtoJSON()
-    const MNISTCNN = new CNN(4, [4], 1, 'ReLU')
+    const MNISTCNN = new CNN(4, [4], 1, 'ReLU', 1)
 
     testData.forEach((t: any) => {
         const input: Layer = t.input.map((i: number) => ({ value: i }))
-        MNISTCNN.train(input, t.label)
+        const output = MNISTCNN.calculateOutput(input)
+        console.log(output)
     })
 
     // const input: Layer = [{ value: 3 }, { value: 6 }]

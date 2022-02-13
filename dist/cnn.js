@@ -2,19 +2,20 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CNN = void 0;
 class CNN {
-    constructor(inputs, hiddenLayers, outputs, activation) {
+    constructor(input, hiddenLayers, output, activation, learningRate) {
         // notation: w_lij is weight i from neuron j in layer l
         this.weights = [];
         this.activationFunctions = {
             'ReLU': this.activateReLU
         };
-        console.log('inputs: ' + inputs + ', hiddenLayers: ' + JSON.stringify(hiddenLayers) + ', outputs: ' + outputs);
+        console.log('input: ' + input + ', hiddenLayers: ' + JSON.stringify(hiddenLayers) + ', output: ' + output);
         const initialNeuron = { value: undefined };
-        // this.inputs = Array(inputs).fill(initialNeuron)
+        // this.input = Array(input).fill(initialNeuron)
         this.hiddenLayers = hiddenLayers.map((l) => Array(l).fill(initialNeuron));
-        this.outputs = Array(outputs).fill(initialNeuron);
+        this.output = Array(output).fill(initialNeuron);
         this.activation = this.activationFunctions[activation];
-        const allLayers = [inputs, ...hiddenLayers, outputs];
+        this.learningRate = learningRate;
+        const allLayers = [input, ...hiddenLayers, output];
         const layerDimensions = allLayers.reduce((p, l, i) => (allLayers[i + 1] ? [...p, [l, allLayers[i + 1]]] : p), []);
         console.log('Layer Dimensions: ' + JSON.stringify(layerDimensions));
         layerDimensions.forEach(([neurons, weights]) => {
@@ -36,14 +37,14 @@ class CNN {
             throw new Error('conflict at calculating next neuron value');
         }
         const numberOfWeights = weights.length;
-        let sumToReturn = 0;
+        let dotProductSum = 0;
         for (let w = 0; w < numberOfWeights; w++) {
-            sumToReturn += weights[w] * previousLayer[w].value;
+            dotProductSum += weights[w] * previousLayer[w].value;
         }
-        return sumToReturn;
+        return dotProductSum;
     }
-    calculateOutput(inputs) {
-        let previousLayer = inputs;
+    calculateOutput(input) {
+        let previousLayer = input;
         this.hiddenLayers.forEach((layer, l) => {
             console.log('layer ' + (l + 1) + ': ' + JSON.stringify(previousLayer));
             const newLayer = layer.map((neuron, n) => {
@@ -54,7 +55,7 @@ class CNN {
             });
             previousLayer = newLayer;
         });
-        const output = this.outputs.map((neuron, n) => {
+        const output = this.output.map((neuron, n) => {
             const finalWeights = this.weights[this.weights.length - 1][n];
             return { value: this.activation(this.calculateNeuronValue(finalWeights, previousLayer)) };
         });
@@ -63,13 +64,28 @@ class CNN {
     }
     softmax(layer) {
         const expsum = layer.reduce((i, { value }) => i + Math.exp(value), 0);
-        return layer.map((neuron) => {
-            return Math.exp(neuron.value) / expsum;
+        return layer.map(({ value }) => {
+            return { value: (Math.exp(value) / expsum) };
         });
     }
-    train(inputs, label) {
+    train(input, label) {
+        const output = this.calculateOutput(input);
+        const error = this.calculateError(output, label);
     }
-    detect() {
+    calculateError(output, label) {
+        if (output.length !== label.length) {
+            throw new Error('conflict at calculating error');
+        }
+        const outputValues = output.map(o => o.value);
+        const numberOfOutputs = output.length;
+        let squaredErrorSum = 0;
+        for (let o = 0; o < numberOfOutputs; o++) {
+            squaredErrorSum += Math.pow(label[o] - outputValues[o], 2);
+        }
+        return 0.5 * squaredErrorSum;
+    }
+    detect(input) {
+        return this.calculateOutput(input);
     }
     getWeights() {
         console.log(this.weights);
@@ -80,15 +96,15 @@ class CNN {
 }
 exports.CNN = CNN;
 /*
-3 inputs to 5 neurons
+3 input to 5 neurons
 [[w11 w12 w13 w13 w14 w15], [w21 w22 w23 w24 w25], [w31 w32 w33 w34 w35]]
 5 neurons to 4 neurons
 [[w11 w12 w13 w13 w14], [w21 w22 w23 w24], [w31 w32 w33 w34], [w41 w42 w43 w44], [w51 w52 w53 w54]]
-4 neurons to 2 outputs
+4 neurons to 2 output
 [[w11 w12], [w21 w22], [w31 w32], [w41 w42]]
 
 
-inputs = 3
+input = 3
 layers = [5, 4]
 output = 2
 
