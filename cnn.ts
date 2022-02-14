@@ -12,7 +12,7 @@ export class CNN {
     constructor(input: number, hiddenLayers: number[], output: number, activation: ActivationType, learningRate: number) {
         console.log('input: ' + input + ', hiddenLayers: ' + JSON.stringify(hiddenLayers) + ', output: ' + output)
 
-        const initialNeuron: Neuron = { value: undefined }
+        const initialNeuron: Neuron = { dotProduct: undefined, activation: undefined, error: undefined }
         this.hiddenLayers = hiddenLayers.map((l): Layer => Array(l).fill(initialNeuron))
         this.output = Array(output).fill(initialNeuron)
         this.activation = activationFunctions[activation]
@@ -60,12 +60,11 @@ export class CNN {
     calculateOutput(input: Layer): Layer {
         let previousLayer = input
         this.hiddenLayers = this.hiddenLayers.map((layer: Layer, l: number): Layer => {
-            console.log('layer ' + (l + 1) + ': ' + JSON.stringify(previousLayer))
             const newLayer = layer.map((neuron: Neuron, n: number) => {
                 const relevantWeights = this.weights[l][n]
-                const newValue = this.dotProduct(relevantWeights, previousLayer)
-                const activatedValue = this.activation.root(newValue)
-                return { ...neuron, value: activatedValue }
+                const dotProduct = this.dotProduct(relevantWeights, previousLayer)
+                const activation = this.activation.root(dotProduct)
+                return { ...neuron, activation, dotProduct }
             })
             previousLayer = newLayer
             return newLayer
@@ -73,30 +72,31 @@ export class CNN {
 
         const output = this.output.map((neuron: Neuron, n: number) => {
             const finalWeights = this.weights[this.weights.length - 1][n]
-            return { value: this.activation.root(this.dotProduct(finalWeights, previousLayer)) }
+            const dotProduct = this.dotProduct(finalWeights, previousLayer)
+            const activation = this.activation.root(dotProduct)
+            return { ...neuron, activation, dotProduct }
         })
-        console.log(output)
-        // return this.softmax(output)
-        return output.map(({ value }: Neuron) => ({ value: this.activation.root(value) }))
+
+        return output.map(({ activation, ...rest }: Neuron) => ({ activation: this.activation.root(activation), ...rest }))
     }
 
     calculateError(output: Layer, label: Label) {
         if (output.length !== label.length) {
             throw new Error('conflict at calculating error')
         }
-        const outputValues = output.map(o => o.value)
+        const outputActivations = output.map(o => o.activation)
         const numberOfOutputs = output.length
         let squaredErrorSum = 0
         for (let o = 0; o < numberOfOutputs; o++) {
-            squaredErrorSum += this.halfSquaredError(outputValues[o], label[o])
+            squaredErrorSum += this.halfSquaredError(outputActivations[o], label[o])
         }
         return squaredErrorSum / numberOfOutputs
     }
 
     // del_E / del_w_i
     partialDerivativeErrorFinalLayer(real: number, desired: number, dotProduct: number, previousNode: Neuron) {
-        const { value } = previousNode
-        return this.derivedError(real, desired, dotProduct) * value
+        const { activation } = previousNode
+        return this.derivedError(real, desired, dotProduct) * activation
     }
 
     // E
@@ -109,6 +109,10 @@ export class CNN {
         return (real - desired) * this.activation.derivative(dotProduct)
     }
 
+    partialDerivativeErrorHiddenLayer(real: number, desired: number, dotProduct: number, previousNode: Neuron) {
+
+    }
+
     dotProduct(weights: Weight[], previousLayer: Layer) {
         if (weights.length !== previousLayer.length) {
             throw new Error('conflict at calculating next neuron value')
@@ -116,15 +120,16 @@ export class CNN {
         const numberOfWeights = weights.length
         let dotProductSum = 0
         for (let w = 0; w < numberOfWeights; w++) {
-            dotProductSum += weights[w] * previousLayer[w].value
+            dotProductSum += weights[w] * previousLayer[w].activation
         }
         return dotProductSum
     }
 
     softmax(layer: Layer): Layer {
-        const expsum = layer.reduce((i: number, { value }: Neuron) => i + Math.exp(value), 0)
-        return layer.map(({ value }: Neuron) => {
-            return { value: (Math.exp(value) / expsum) }
+        const expsum = layer.reduce((i: number, { activation }: Neuron) => i + Math.exp(activation), 0)
+        return layer.map((neuron: Neuron) => {
+            const { activation } = neuron
+            return { activation: (Math.exp(activation) / expsum), ...neuron }
         })
     }
 

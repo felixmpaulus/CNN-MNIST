@@ -1,7 +1,9 @@
 type Label = number[]
 type Layer = Neuron[]
 type Neuron = {
-    value: number
+    dotProduct: number
+    activation: number
+    error: number
 }
 type Activation = {
     root: (v: number) => number
