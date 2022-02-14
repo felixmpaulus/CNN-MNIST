@@ -1,3 +1,5 @@
+import { activationFunctions } from './activation';
+
 export class CNN {
 
     // notation: w_lij is weight i from neuron j in layer l
@@ -11,10 +13,9 @@ export class CNN {
         console.log('input: ' + input + ', hiddenLayers: ' + JSON.stringify(hiddenLayers) + ', output: ' + output)
 
         const initialNeuron: Neuron = { value: undefined }
-        // this.input = Array(input).fill(initialNeuron)
         this.hiddenLayers = hiddenLayers.map((l): Layer => Array(l).fill(initialNeuron))
         this.output = Array(output).fill(initialNeuron)
-        this.activation = this.activationFunctions[activation]
+        this.activation = activationFunctions[activation]
         this.learningRate = learningRate
 
         const allLayers = [input, ...hiddenLayers, output]
@@ -36,6 +37,78 @@ export class CNN {
         console.log(this.weights)
     }
 
+    detect(input: Layer) {
+        return this.calculateOutput(input)
+    }
+
+    // we go from the back to the front
+    // final layer:
+    // we deriviate the full error function by one weight after another (all weights in total)
+    // d_Error / d_dotProduct_j * d_dotProduct_j / d_w_ij
+    // the partial derivative of a weight is the product of:
+    // error of node j in layer l * output of node i in layer l-1
+    // with the error
+    //  - beeing dependent of the values in the 'next' layer
+    //  - using the values after passing through the activation function
+
+
+    train(input: Layer, label: Label) {
+        const output = this.calculateOutput(input)
+        const error = this.calculateError(output, label)
+    }
+
+    calculateOutput(input: Layer): Layer {
+        let previousLayer = input
+        this.hiddenLayers = this.hiddenLayers.map((layer: Layer, l: number): Layer => {
+            console.log('layer ' + (l + 1) + ': ' + JSON.stringify(previousLayer))
+            const newLayer = layer.map((neuron: Neuron, n: number) => {
+                const relevantWeights = this.weights[l][n]
+                const newValue = this.dotProduct(relevantWeights, previousLayer)
+                const activatedValue = this.activation.root(newValue)
+                return { ...neuron, value: activatedValue }
+            })
+            previousLayer = newLayer
+            return newLayer
+        })
+
+        const output = this.output.map((neuron: Neuron, n: number) => {
+            const finalWeights = this.weights[this.weights.length - 1][n]
+            return { value: this.activation.root(this.dotProduct(finalWeights, previousLayer)) }
+        })
+        console.log(output)
+        // return this.softmax(output)
+        return output.map(({ value }: Neuron) => ({ value: this.activation.root(value) }))
+    }
+
+    calculateError(output: Layer, label: Label) {
+        if (output.length !== label.length) {
+            throw new Error('conflict at calculating error')
+        }
+        const outputValues = output.map(o => o.value)
+        const numberOfOutputs = output.length
+        let squaredErrorSum = 0
+        for (let o = 0; o < numberOfOutputs; o++) {
+            squaredErrorSum += this.halfSquaredError(outputValues[o], label[o])
+        }
+        return squaredErrorSum / numberOfOutputs
+    }
+
+    // del_E / del_w_i
+    partialDerivativeErrorFinalLayer(real: number, desired: number, dotProduct: number, previousNode: Neuron) {
+        const { value } = previousNode
+        return this.derivedError(real, desired, dotProduct) * value
+    }
+
+    // E
+    halfSquaredError(real: number, desired: number): number {
+        return 0.5 * (Math.pow(real - desired, 2))
+    }
+
+    // δ
+    derivedError(real: number, desired: number, dotProduct: number): number {
+        return (real - desired) * this.activation.derivative(dotProduct)
+    }
+
     dotProduct(weights: Weight[], previousLayer: Layer) {
         if (weights.length !== previousLayer.length) {
             throw new Error('conflict at calculating next neuron value')
@@ -48,80 +121,11 @@ export class CNN {
         return dotProductSum
     }
 
-    calculateOutput(input: Layer): Layer {
-        let previousLayer = input
-        this.hiddenLayers = this.hiddenLayers.map((layer: Layer, l: number): Layer => {
-            console.log('layer ' + (l + 1) + ': ' + JSON.stringify(previousLayer))
-            const newLayer = layer.map((neuron: Neuron, n: number) => {
-                const relevantWeights = this.weights[l][n]
-                const newValue = this.dotProduct(relevantWeights, previousLayer)
-                const activatedValue = this.activation(newValue)
-                return { ...neuron, value: activatedValue }
-            })
-            previousLayer = newLayer
-            return newLayer
-        })
-
-        const output = this.output.map((neuron: Neuron, n: number) => {
-            const finalWeights = this.weights[this.weights.length - 1][n]
-            return { value: this.activation(this.dotProduct(finalWeights, previousLayer)) }
-        })
-        console.log(output)
-        return this.softmax(output)
-    }
-
-    softmax(layer: Layer) {
+    softmax(layer: Layer): Layer {
         const expsum = layer.reduce((i: number, { value }: Neuron) => i + Math.exp(value), 0)
-
         return layer.map(({ value }: Neuron) => {
             return { value: (Math.exp(value) / expsum) }
         })
-    }
-
-    // the partial derivative of a weight is the product of:
-    // error of node j in layer l * output of node i in layer l-1
-    // with the error
-    //  - beeing dependent of the values in the 'next' layer
-    //  - using the values after passing through the activation function
-    //  ...https://brilliant.org/wiki/backpropagation/
-
-
-    train(input: Layer, label: Label) {
-        const output = this.calculateOutput(input)
-        const error = this.calculateError(output, label)
-    }
-
-    calculateError(output: Layer, label: Label) {
-        if (output.length !== label.length) {
-            throw new Error('conflict at calculating error')
-        }
-        const outputValues = output.map(o => o.value)
-        const numberOfOutputs = output.length
-        let squaredErrorSum = 0
-        for (let o = 0; o < numberOfOutputs; o++) {
-            squaredErrorSum += Math.pow(outputValues[o] - label[o], 2)
-        }
-        return (0.5 * squaredErrorSum) / numberOfOutputs
-    }
-
-    detect(input: Layer) {
-        return this.calculateOutput(input)
-    }
-
-    getWeights() {
-        console.log(this.weights)
-    }
-
-    activationFunctions = {
-        'ReLU': this.activateReLU
-    }
-
-    activateReLU(value: number) {
-        return value > 0 ? value : 0
-    }
-
-    deriviateReLU(value: number) {
-        return value > 0 ? 1 : 0
     }
 
 }
