@@ -2,9 +2,9 @@ type Label = number[]
 type Layer = Neuron[]
 type InputLayer = number[]
 type Neuron = {
-    dotProduct: number
+    dotProduct?: number
     activation: number
-    error: number
+    error?: number
 }
 type Activation = {
     primitive: (v: number) => number

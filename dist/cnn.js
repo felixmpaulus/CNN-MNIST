@@ -3,18 +3,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.CNN = void 0;
 const activation_1 = require("./activation");
 class CNN {
-    constructor(inputSize, hiddenLayerSizes, outputSize, activation, learningRate) {
-        // notation: w_lij is weight i from neuron j in layer l
+    constructor(inputSize, hiddenLayerSizes, outputSize, activation) {
         this.weights = [];
         console.log('input: ' + inputSize + ', hiddenLayers: ' + JSON.stringify(hiddenLayerSizes) + ', output: ' + outputSize);
-        const initialNeuron = { dotProduct: undefined, activation: undefined, error: undefined };
-        this.hiddenLayers = hiddenLayerSizes.map((l) => Array(l).fill(initialNeuron));
-        this.output = Array(outputSize).fill(initialNeuron);
         this.activation = activation_1.activationFunctions[activation];
-        this.learningRate = learningRate;
-        const allLayers = [inputSize, ...hiddenLayerSizes, outputSize];
-        const layerDimensions = allLayers.reduce((p, l, i) => (allLayers[i + 1] ? [...p, [l, allLayers[i + 1]]] : p), []);
-        console.log('Layer Dimensions: ' + JSON.stringify(layerDimensions));
+        this.layers = [inputSize, ...hiddenLayerSizes, outputSize];
+        const layerDimensions = this.layers.reduce((p, l, i) => (this.layers[i + 1] ? [...p, [l, this.layers[i + 1]]] : p), []);
+        console.log('Layer Sizes: ' + JSON.stringify(layerDimensions));
         layerDimensions.forEach(([neurons, weights]) => {
             const weightsForNeuron = [];
             for (let w = 0; w < weights; w++) {
@@ -41,13 +36,11 @@ class CNN {
     // with the error
     //  - beeing dependent of the values in the 'next' layer
     //  - using the values after passing through the activation function
-    train(input, label) {
-        const output = this.calculateOutput(input);
-        const error = this.calculateError(output, label);
-    }
     calculateOutput(input) {
-        let previousLayer = input.map(i => ({ activation: i, dotProduct: undefined, error: undefined }));
-        this.hiddenLayers = this.hiddenLayers.map((layer, l) => {
+        let previousLayer = input.map(i => ({ activation: i }));
+        const initialNeuron = { dotProduct: undefined, activation: undefined };
+        let hiddenLayers = this.layers.slice(1).map((l) => Array(l).fill(initialNeuron));
+        hiddenLayers = hiddenLayers.map((layer, l) => {
             const newLayer = layer.map((neuron, n) => {
                 const relevantWeights = this.weights[l][n];
                 const dotProduct = this.dotProduct(relevantWeights, previousLayer);
@@ -57,13 +50,13 @@ class CNN {
             previousLayer = newLayer;
             return newLayer;
         });
-        this.output = this.output.map((neuron, n) => {
-            const finalWeights = this.weights[this.weights.length - 1][n];
-            const dotProduct = this.dotProduct(finalWeights, previousLayer);
-            const activation = this.activation.primitive(dotProduct);
-            return Object.assign(Object.assign({}, neuron), { activation, dotProduct });
-        });
-        return this.output;
+        this.logAllValues(input, hiddenLayers);
+        return hiddenLayers[hiddenLayers.length - 1];
+    }
+    train(input, label, learningRate) {
+        const output = this.calculateOutput(input);
+        const error = this.calculateError(output, label);
+        console.log('output: ' + output.map(o => o.activation) + ', label: ' + label + ', error: ' + error);
     }
     calculateError(output, label) {
         if (output.length !== label.length) {
@@ -110,16 +103,16 @@ class CNN {
             return Object.assign({ activation: (Math.exp(activation) / expsum) }, neuron);
         });
     }
-    logAllVAlues(input) {
+    logAllValues(input, hiddenLayers) {
         let log = '';
         const inputAsStandardLayer = input.map(i => ({ activation: i, dotProduct: undefined, error: undefined }));
-        const allLayers = [inputAsStandardLayer, ...this.hiddenLayers, this.output];
+        const allLayers = [inputAsStandardLayer, ...hiddenLayers];
         let i = 0;
         while (true) {
             let continueAdding = false;
             allLayers.forEach((l) => {
                 const neuron = l[i];
-                log = log + (neuron ? (Math.round(neuron.activation * 100) / 100) : ' ') + '  ';
+                log = log + (neuron ? (Math.round(neuron.activation * 100) / 100) : ' ') + '    ';
                 continueAdding = (continueAdding || !!neuron);
             });
             if (!continueAdding)

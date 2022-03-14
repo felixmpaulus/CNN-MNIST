@@ -33,22 +33,22 @@ function main() {
 
 
     const testData = [
-        { input: [0, 0, 1, 1], label: 1 },
-        // { input: [1, 1, 0, 0], label: 1 },
-        // { input: [1, 0, 1, 0], label: 1 },
-        // { input: [0, 1, 0, 1], label: 1 },
-        // { input: [1, 0, 0, 1], label: 0 },
-        // { input: [0, 1, 1, 0], label: 0 }
+        { input: [0, 0, 1, 1], label: [1] },
+        // { input: [1, 1, 0, 0], label: [1] },
+        // { input: [1, 0, 1, 0], label: [1] },
+        // { input: [0, 1, 0, 1], label: [1] },
+        // { input: [1, 0, 0, 1], label: [0] },
+        // { input: [0, 1, 1, 0], label: [0] }
     ]
 
     // const MNISTasJSON = convertMNISTtoJSON()
-    const MNISTCNN = new CNN(4, [4], 1, 'ReLU', 1)
+    const MNISTCNN = new CNN(4, [4], 1, 'ReLU')
 
-    testData.forEach((t: any) => {
-        const input = t.input
-        const output: Layer = MNISTCNN.calculateOutput(input)
+    testData.forEach(({ input, label }) => {
+        MNISTCNN.train(input, label, 0.3)
+        // const output: Layer = MNISTCNN.calculateOutput(input)
+        // const error: number[] = MNISTCNN.calculateError(input)
         // console.log(output.map(n => n.activation))
-        MNISTCNN.logAllVAlues(input)
     })
 
     // const input: Layer = [{ value: 3 }, { value: 6 }]

@@ -3,24 +3,18 @@ import { activationFunctions } from './activation';
 export class CNN {
 
     // notation: w_lij is weight i from neuron j in layer l
+    layers: number[]
     weights: Weight[][][] = []
-    learningRate;
-    output: Layer
-    hiddenLayers: Layer[]
     activation: Activation
 
-    constructor(inputSize: number, hiddenLayerSizes: number[], outputSize: number, activation: ActivationType, learningRate: number) {
+    constructor(inputSize: number, hiddenLayerSizes: number[], outputSize: number, activation: ActivationType) {
         console.log('input: ' + inputSize + ', hiddenLayers: ' + JSON.stringify(hiddenLayerSizes) + ', output: ' + outputSize)
 
-        const initialNeuron: Neuron = { dotProduct: undefined, activation: undefined, error: undefined }
-        this.hiddenLayers = hiddenLayerSizes.map((l): Layer => Array(l).fill(initialNeuron))
-        this.output = Array(outputSize).fill(initialNeuron)
         this.activation = activationFunctions[activation]
-        this.learningRate = learningRate
 
-        const allLayers = [inputSize, ...hiddenLayerSizes, outputSize]
-        const layerDimensions = allLayers.reduce((p, l, i) => (allLayers[i + 1] ? [...p, [l, allLayers[i + 1]]] : p), [])
-        console.log('Layer Dimensions: ' + JSON.stringify(layerDimensions))
+        this.layers = [inputSize, ...hiddenLayerSizes, outputSize]
+        const layerDimensions = this.layers.reduce((p, l, i) => (this.layers[i + 1] ? [...p, [l, this.layers[i + 1]]] : p), [])
+        console.log('Layer Sizes: ' + JSON.stringify(layerDimensions))
 
         layerDimensions.forEach(([neurons, weights]) => {
             const weightsForNeuron: Weight[][] = []
@@ -37,29 +31,20 @@ export class CNN {
         console.log(this.weights)
     }
 
-    detect(input: InputLayer) {
-        return this.calculateOutput(input)
+    detect(input: InputLayer): Layer {
+        const propagatedNetwork = this.propagate(input)
+        const outputLayer = propagatedNetwork[propagatedNetwork.length - 1]
+        return outputLayer
     }
 
-    // we go from the back to the front
-    // final layer:
-    // we deriviate the full error function by one weight after another (all weights in total)
-    // d_Error / d_dotProduct_j * d_dotProduct_j / d_w_ij
-    // the partial derivative of a weight is the product of:
-    // error of node j in layer l * output of node i in layer l-1
-    // with the error
-    //  - beeing dependent of the values in the 'next' layer
-    //  - using the values after passing through the activation function
+    propagate(input: InputLayer): Layer[] {
+        const inputAsStandardLayer = input.map(i => ({ activation: i }))
+        let previousLayer: Layer = inputAsStandardLayer
 
+        const initialNeuron: Neuron = { dotProduct: undefined, activation: undefined }
+        let hiddenLayers = this.layers.slice(1).map((l): Layer => Array(l).fill(initialNeuron))
 
-    train(input: InputLayer, label: Label) {
-        const output = this.calculateOutput(input)
-        const error = this.calculateError(output, label)
-    }
-
-    calculateOutput(input: InputLayer): Layer {
-        let previousLayer: Layer = input.map(i => ({ activation: i, dotProduct: undefined, error: undefined }))
-        this.hiddenLayers = this.hiddenLayers.map((layer: Layer, l: number): Layer => {
+        hiddenLayers = hiddenLayers.map((layer: Layer, l: number): Layer => {
             const newLayer = layer.map((neuron: Neuron, n: number) => {
                 const relevantWeights = this.weights[l][n]
                 const dotProduct = this.dotProduct(relevantWeights, previousLayer)
@@ -70,14 +55,43 @@ export class CNN {
             return newLayer
         })
 
-        this.output = this.output.map((neuron: Neuron, n: number) => {
-            const finalWeights = this.weights[this.weights.length - 1][n]
-            const dotProduct = this.dotProduct(finalWeights, previousLayer)
-            const activation = this.activation.primitive(dotProduct)
-            return { ...neuron, activation, dotProduct }
-        })
+        this.logAllValues(input, hiddenLayers)
+        return [inputAsStandardLayer, ...hiddenLayers]
+    }
 
-        return this.output
+    train(input: InputLayer, label: Label, learningRate: number) {
+        const propagatedNetwork = this.propagate(input)
+        for (let l = propagatedNetwork.length - 1; l > 1; l--) {
+            // iterate backwards through all weights
+
+            // output layer
+            // calculate the new weight by
+            // w = w - l dE/dw
+            // dE/dw = derived Error * derived activation(value) * output previous neuron(activation)
+
+            // hidden layer 1
+            // calculate the new weight by
+            // w = w - l * dE/dw
+            // dE/dw = magic * derived activation(value) * output previous neuron(activation)
+            // magic = complete error function derived by the activation of the neuron the weight goes to
+            //         wich is calculated by the sum of all errors derived by the activation
+
+            // the del for a neuron in the previous layer del_j is calculated by
+            // sum over all neurons in the current layer:
+            //      the new weight going from the neuron the previous layer to the neuron
+            //      
+            //      the derived activation function of the neuron
+        }
+
+
+
+
+
+        const outputLayer = propagatedNetwork[propagatedNetwork.length - 1]
+        const error = this.calculateError(outputLayer, label)
+
+        console.log('output: ' + outputLayer.map(o => o.activation) + ', label: ' + label + ', error: ' + error)
+
     }
 
     calculateError(output: Layer, label: Label) {
@@ -93,24 +107,12 @@ export class CNN {
         return squaredErrorSum / numberOfOutputs
     }
 
-    // del_E / del_w_i
-    partialDerivativeErrorFinalLayer(real: number, desired: number, dotProduct: number, previousNode: Neuron) {
-        const { activation } = previousNode
-        return this.derivedError(real, desired, dotProduct) * activation
-    }
-
-    // E
     halfSquaredError(real: number, desired: number): number {
         return 0.5 * (Math.pow(real - desired, 2))
     }
 
-    // δ
-    derivedError(real: number, desired: number, dotProduct: number): number {
-        return (real - desired) * this.activation.derivative(dotProduct)
-    }
-
-    partialDerivativeErrorHiddenLayer(real: number, desired: number, dotProduct: number, previousNode: Neuron) {
-
+    derivedError(real: number, desired: number): number {
+        return (real - desired)
     }
 
     dotProduct(weights: Weight[], previousLayer: Layer) {
@@ -133,10 +135,10 @@ export class CNN {
         })
     }
 
-    logAllVAlues(input: InputLayer) {
+    logAllValues(input: InputLayer, hiddenLayers: Layer[]) {
         let log = ''
         const inputAsStandardLayer: Layer = input.map(i => ({ activation: i, dotProduct: undefined, error: undefined }))
-        const allLayers: Layer[] = [inputAsStandardLayer, ...this.hiddenLayers, this.output]
+        const allLayers: Layer[] = [inputAsStandardLayer, ...hiddenLayers]
         let i = 0
         while (true) {
             let continueAdding: Boolean = false
