@@ -9,16 +9,16 @@ export class CNN {
     hiddenLayers: Layer[]
     activation: Activation
 
-    constructor(input: number, hiddenLayers: number[], output: number, activation: ActivationType, learningRate: number) {
-        console.log('input: ' + input + ', hiddenLayers: ' + JSON.stringify(hiddenLayers) + ', output: ' + output)
+    constructor(inputSize: number, hiddenLayerSizes: number[], outputSize: number, activation: ActivationType, learningRate: number) {
+        console.log('input: ' + inputSize + ', hiddenLayers: ' + JSON.stringify(hiddenLayerSizes) + ', output: ' + outputSize)
 
         const initialNeuron: Neuron = { dotProduct: undefined, activation: undefined, error: undefined }
-        this.hiddenLayers = hiddenLayers.map((l): Layer => Array(l).fill(initialNeuron))
-        this.output = Array(output).fill(initialNeuron)
+        this.hiddenLayers = hiddenLayerSizes.map((l): Layer => Array(l).fill(initialNeuron))
+        this.output = Array(outputSize).fill(initialNeuron)
         this.activation = activationFunctions[activation]
         this.learningRate = learningRate
 
-        const allLayers = [input, ...hiddenLayers, output]
+        const allLayers = [inputSize, ...hiddenLayerSizes, outputSize]
         const layerDimensions = allLayers.reduce((p, l, i) => (allLayers[i + 1] ? [...p, [l, allLayers[i + 1]]] : p), [])
         console.log('Layer Dimensions: ' + JSON.stringify(layerDimensions))
 
@@ -37,7 +37,7 @@ export class CNN {
         console.log(this.weights)
     }
 
-    detect(input: Layer) {
+    detect(input: InputLayer) {
         return this.calculateOutput(input)
     }
 
@@ -52,32 +52,32 @@ export class CNN {
     //  - using the values after passing through the activation function
 
 
-    train(input: Layer, label: Label) {
+    train(input: InputLayer, label: Label) {
         const output = this.calculateOutput(input)
         const error = this.calculateError(output, label)
     }
 
-    calculateOutput(input: Layer): Layer {
-        let previousLayer = input
+    calculateOutput(input: InputLayer): Layer {
+        let previousLayer: Layer = input.map(i => ({ activation: i, dotProduct: undefined, error: undefined }))
         this.hiddenLayers = this.hiddenLayers.map((layer: Layer, l: number): Layer => {
             const newLayer = layer.map((neuron: Neuron, n: number) => {
                 const relevantWeights = this.weights[l][n]
                 const dotProduct = this.dotProduct(relevantWeights, previousLayer)
-                const activation = this.activation.root(dotProduct)
+                const activation = this.activation.primitive(dotProduct)
                 return { ...neuron, activation, dotProduct }
             })
             previousLayer = newLayer
             return newLayer
         })
 
-        const output = this.output.map((neuron: Neuron, n: number) => {
+        this.output = this.output.map((neuron: Neuron, n: number) => {
             const finalWeights = this.weights[this.weights.length - 1][n]
             const dotProduct = this.dotProduct(finalWeights, previousLayer)
-            const activation = this.activation.root(dotProduct)
+            const activation = this.activation.primitive(dotProduct)
             return { ...neuron, activation, dotProduct }
         })
 
-        return output.map(({ activation, ...rest }: Neuron) => ({ activation: this.activation.root(activation), ...rest }))
+        return this.output
     }
 
     calculateError(output: Layer, label: Label) {
@@ -133,7 +133,28 @@ export class CNN {
         })
     }
 
+    logAllVAlues(input: InputLayer) {
+        let log = ''
+        const inputAsStandardLayer: Layer = input.map(i => ({ activation: i, dotProduct: undefined, error: undefined }))
+        const allLayers: Layer[] = [inputAsStandardLayer, ...this.hiddenLayers, this.output]
+        let i = 0
+        while (true) {
+            let continueAdding: Boolean = false
+            allLayers.forEach((l: Layer) => {
+                const neuron = l[i]
+                log = log + (neuron ? (Math.round(neuron.activation * 100) / 100) : ' ') + '    '
+                continueAdding = (continueAdding || !!neuron)
+            })
+            if (!continueAdding) break
+            log += '\n'
+            i += 1
+        }
+        console.log(log)
+    }
+
 }
+
+
 /*
 3 input to 5 neurons
 [[w11 w12 w13 w13 w14 w15], [w21 w22 w23 w24 w25], [w31 w32 w33 w34 w35]]

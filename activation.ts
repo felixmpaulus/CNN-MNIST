@@ -1,5 +1,5 @@
 export const activationFunctions = {
-    'ReLU': { root: ReLU, derivative: derivedReLU }
+    'ReLU': { primitive: ReLU, derivative: derivedReLU }
 }
 
 function ReLU(value: number) {

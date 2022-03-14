@@ -29,18 +29,19 @@ function main() {
     */
     const testData = [
         { input: [0, 0, 1, 1], label: 1 },
-        { input: [1, 1, 0, 0], label: 1 },
-        { input: [1, 0, 1, 0], label: 1 },
-        { input: [0, 1, 0, 1], label: 1 },
-        { input: [1, 0, 0, 1], label: 0 },
-        { input: [0, 1, 1, 0], label: 0 }
+        // { input: [1, 1, 0, 0], label: 1 },
+        // { input: [1, 0, 1, 0], label: 1 },
+        // { input: [0, 1, 0, 1], label: 1 },
+        // { input: [1, 0, 0, 1], label: 0 },
+        // { input: [0, 1, 1, 0], label: 0 }
     ];
     // const MNISTasJSON = convertMNISTtoJSON()
     const MNISTCNN = new cnn_1.CNN(4, [4], 1, 'ReLU', 1);
     testData.forEach((t) => {
-        const input = t.input.map((i) => ({ value: i }));
+        const input = t.input;
         const output = MNISTCNN.calculateOutput(input);
-        console.log(output);
+        // console.log(output.map(n => n.activation))
+        MNISTCNN.logAllVAlues(input);
     });
     // const input: Layer = [{ value: 3 }, { value: 6 }]
     // console.log('output: ' + JSON.stringify(output))

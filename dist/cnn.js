@@ -1,21 +1,18 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CNN = void 0;
+const activation_1 = require("./activation");
 class CNN {
-    constructor(input, hiddenLayers, output, activation, learningRate) {
+    constructor(inputSize, hiddenLayerSizes, outputSize, activation, learningRate) {
         // notation: w_lij is weight i from neuron j in layer l
         this.weights = [];
-        this.activationFunctions = {
-            'ReLU': this.activateReLU
-        };
-        console.log('input: ' + input + ', hiddenLayers: ' + JSON.stringify(hiddenLayers) + ', output: ' + output);
-        const initialNeuron = { value: undefined };
-        // this.input = Array(input).fill(initialNeuron)
-        this.hiddenLayers = hiddenLayers.map((l) => Array(l).fill(initialNeuron));
-        this.output = Array(output).fill(initialNeuron);
-        this.activation = this.activationFunctions[activation];
+        console.log('input: ' + inputSize + ', hiddenLayers: ' + JSON.stringify(hiddenLayerSizes) + ', output: ' + outputSize);
+        const initialNeuron = { dotProduct: undefined, activation: undefined, error: undefined };
+        this.hiddenLayers = hiddenLayerSizes.map((l) => Array(l).fill(initialNeuron));
+        this.output = Array(outputSize).fill(initialNeuron);
+        this.activation = activation_1.activationFunctions[activation];
         this.learningRate = learningRate;
-        const allLayers = [input, ...hiddenLayers, output];
+        const allLayers = [inputSize, ...hiddenLayerSizes, outputSize];
         const layerDimensions = allLayers.reduce((p, l, i) => (allLayers[i + 1] ? [...p, [l, allLayers[i + 1]]] : p), []);
         console.log('Layer Dimensions: ' + JSON.stringify(layerDimensions));
         layerDimensions.forEach(([neurons, weights]) => {
@@ -32,66 +29,105 @@ class CNN {
         console.log('Weights: ');
         console.log(this.weights);
     }
-    calculateNeuronValue(weights, previousLayer) {
+    detect(input) {
+        return this.calculateOutput(input);
+    }
+    // we go from the back to the front
+    // final layer:
+    // we deriviate the full error function by one weight after another (all weights in total)
+    // d_Error / d_dotProduct_j * d_dotProduct_j / d_w_ij
+    // the partial derivative of a weight is the product of:
+    // error of node j in layer l * output of node i in layer l-1
+    // with the error
+    //  - beeing dependent of the values in the 'next' layer
+    //  - using the values after passing through the activation function
+    train(input, label) {
+        const output = this.calculateOutput(input);
+        const error = this.calculateError(output, label);
+    }
+    calculateOutput(input) {
+        let previousLayer = input.map(i => ({ activation: i, dotProduct: undefined, error: undefined }));
+        this.hiddenLayers = this.hiddenLayers.map((layer, l) => {
+            const newLayer = layer.map((neuron, n) => {
+                const relevantWeights = this.weights[l][n];
+                const dotProduct = this.dotProduct(relevantWeights, previousLayer);
+                const activation = this.activation.primitive(dotProduct);
+                return Object.assign(Object.assign({}, neuron), { activation, dotProduct });
+            });
+            previousLayer = newLayer;
+            return newLayer;
+        });
+        this.output = this.output.map((neuron, n) => {
+            const finalWeights = this.weights[this.weights.length - 1][n];
+            const dotProduct = this.dotProduct(finalWeights, previousLayer);
+            const activation = this.activation.primitive(dotProduct);
+            return Object.assign(Object.assign({}, neuron), { activation, dotProduct });
+        });
+        return this.output;
+    }
+    calculateError(output, label) {
+        if (output.length !== label.length) {
+            throw new Error('conflict at calculating error');
+        }
+        const outputActivations = output.map(o => o.activation);
+        const numberOfOutputs = output.length;
+        let squaredErrorSum = 0;
+        for (let o = 0; o < numberOfOutputs; o++) {
+            squaredErrorSum += this.halfSquaredError(outputActivations[o], label[o]);
+        }
+        return squaredErrorSum / numberOfOutputs;
+    }
+    // del_E / del_w_i
+    partialDerivativeErrorFinalLayer(real, desired, dotProduct, previousNode) {
+        const { activation } = previousNode;
+        return this.derivedError(real, desired, dotProduct) * activation;
+    }
+    // E
+    halfSquaredError(real, desired) {
+        return 0.5 * (Math.pow(real - desired, 2));
+    }
+    // δ
+    derivedError(real, desired, dotProduct) {
+        return (real - desired) * this.activation.derivative(dotProduct);
+    }
+    partialDerivativeErrorHiddenLayer(real, desired, dotProduct, previousNode) {
+    }
+    dotProduct(weights, previousLayer) {
         if (weights.length !== previousLayer.length) {
             throw new Error('conflict at calculating next neuron value');
         }
         const numberOfWeights = weights.length;
         let dotProductSum = 0;
         for (let w = 0; w < numberOfWeights; w++) {
-            dotProductSum += weights[w] * previousLayer[w].value;
+            dotProductSum += weights[w] * previousLayer[w].activation;
         }
         return dotProductSum;
     }
-    calculateOutput(input) {
-        let previousLayer = input;
-        this.hiddenLayers.forEach((layer, l) => {
-            console.log('layer ' + (l + 1) + ': ' + JSON.stringify(previousLayer));
-            const newLayer = layer.map((neuron, n) => {
-                const relevantWeights = this.weights[l][n];
-                const newValue = this.calculateNeuronValue(relevantWeights, previousLayer);
-                const activatedValue = this.activation(newValue);
-                return Object.assign(Object.assign({}, neuron), { value: activatedValue });
-            });
-            previousLayer = newLayer;
-        });
-        const output = this.output.map((neuron, n) => {
-            const finalWeights = this.weights[this.weights.length - 1][n];
-            return { value: this.activation(this.calculateNeuronValue(finalWeights, previousLayer)) };
-        });
-        console.log(output);
-        return this.softmax(output);
-    }
     softmax(layer) {
-        const expsum = layer.reduce((i, { value }) => i + Math.exp(value), 0);
-        return layer.map(({ value }) => {
-            return { value: (Math.exp(value) / expsum) };
+        const expsum = layer.reduce((i, { activation }) => i + Math.exp(activation), 0);
+        return layer.map((neuron) => {
+            const { activation } = neuron;
+            return Object.assign({ activation: (Math.exp(activation) / expsum) }, neuron);
         });
     }
-    train(input, label) {
-        const output = this.calculateOutput(input);
-        const error = this.calculateError(output, label);
-    }
-    calculateError(output, label) {
-        if (output.length !== label.length) {
-            throw new Error('conflict at calculating error');
+    logAllVAlues(input) {
+        let log = '';
+        const inputAsStandardLayer = input.map(i => ({ activation: i, dotProduct: undefined, error: undefined }));
+        const allLayers = [inputAsStandardLayer, ...this.hiddenLayers, this.output];
+        let i = 0;
+        while (true) {
+            let continueAdding = false;
+            allLayers.forEach((l) => {
+                const neuron = l[i];
+                log = log + (neuron ? (Math.round(neuron.activation * 100) / 100) : ' ') + '  ';
+                continueAdding = (continueAdding || !!neuron);
+            });
+            if (!continueAdding)
+                break;
+            log += '\n';
+            i += 1;
         }
-        const outputValues = output.map(o => o.value);
-        const numberOfOutputs = output.length;
-        let squaredErrorSum = 0;
-        for (let o = 0; o < numberOfOutputs; o++) {
-            squaredErrorSum += Math.pow(label[o] - outputValues[o], 2);
-        }
-        return 0.5 * squaredErrorSum;
-    }
-    detect(input) {
-        return this.calculateOutput(input);
-    }
-    getWeights() {
-        console.log(this.weights);
-    }
-    activateReLU(value) {
-        return value > 0 ? value : 0;
+        console.log(log);
     }
 }
 exports.CNN = CNN;
