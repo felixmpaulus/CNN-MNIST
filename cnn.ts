@@ -1,33 +1,40 @@
 import { activationFunctions } from './activation';
+import { stat, readFileSync, statSync, writeFileSync, existsSync } from 'fs';
 
 export class CNN {
-
-
     layers: number[]
     weights: Weight[][][] = [] // notation: w_lij is weight i from neuron j in layer l 
-    // weights = [
-    //     [
-    //         [0.33, 0.64, 0.95, 0.91],
-    //         [0.33, 0.73, 0.58, 0.05],
-    //         [0.4, 0.63, 0.64, 0.06],
-    //         [0.83, 0.75, 0.39, 0.33]
-    //     ],
-    //     [[0.88, 0.27, 0.44, 0.61]]
-    // ]
     activation: Activation
+    weightFile: string
     // debug
     errors: number[] = []
     outputs: number[] = []
 
-    constructor(inputSize: number, hiddenLayerSizes: number[], outputSize: number, activation: ActivationType) {
+    constructor(inputSize: number, hiddenLayerSizes: number[], outputSize: number, activation: ActivationType, weightFile: string) {
         console.log('input: ' + inputSize + ', hiddenLayers: ' + JSON.stringify(hiddenLayerSizes) + ', output: ' + outputSize)
 
         this.activation = activationFunctions[activation]
-
+        this.weightFile = weightFile
         this.layers = [inputSize, ...hiddenLayerSizes, outputSize]
+
+
+        const fileExists = weightFile && this.weightFileExists(weightFile)
+        if (fileExists) {
+            const { layers, weights } = this.readWeightFile(weightFile)
+            if (this.hasIdenticalDimensions(layers)) {
+                this.weights = weights
+                console.log('loaded weightFile: ' + weightFile)
+            } else {
+                this.assignRandomWeights()
+            }
+        } else {
+            this.assignRandomWeights()
+        }
+    }
+
+    assignRandomWeights() {
         const layerDimensions = this.layers.reduce((p, l, i) => (this.layers[i + 1] ? [...p, [l, this.layers[i + 1]]] : p), [])
         console.log('Layer Sizes: ' + JSON.stringify(layerDimensions))
-
         layerDimensions.forEach(([neurons, weights]) => {
             const weightsForNeuron: Weight[][] = []
             for (let w = 0; w < weights; w++) {
@@ -39,14 +46,12 @@ export class CNN {
             }
             this.weights.push(weightsForNeuron)
         })
-        console.log('Weights: ')
-        console.log(this.weights)
+        console.log('assigned random weights')
     }
 
     detect(input: InputLayer): Layer {
         const propagatedNetwork = this.propagate(input)
         const outputLayer = propagatedNetwork[propagatedNetwork.length - 1]
-
         return outputLayer
     }
 
@@ -59,7 +64,6 @@ export class CNN {
         this.outputs.push(output)
         this.logAllValues(propagatedNetwork, label)
     }
-
 
     propagate(input: InputLayer): Layer[] {
         const inputAsStandardLayer = input.map(i => ({ activation: i }))
@@ -86,14 +90,14 @@ export class CNN {
         let previousSensitivities: number[] = []
         const oldWeights: number[][][] = this.deepClone(this.weights)
         for (let l = propagatedNetwork.length - 1; l >= 1; l--) {
-            console.log('propagating from layer: ' + l + ' to layer: ' + (l - 1))
+            // console.log('propagating from layer: ' + l + ' to layer: ' + (l - 1))
             const isOutputLayer = l == propagatedNetwork.length - 1
             const layer = propagatedNetwork[l]
             const previousLayer = propagatedNetwork[l - 1]
 
             let sensitivities: number[] = []
             for (let n = 0; n < layer.length; n++) {
-                console.log('looking at neuron: ' + n)
+                // console.log('looking at neuron: ' + n)
                 const neuron = layer[n]
                 const weightsToNeuron = oldWeights[l - 1][n]
 
@@ -114,19 +118,18 @@ export class CNN {
                     const weight = weightsToNeuron[w]
                     const { activation: leftConnectedActivation } = previousLayer[w]
                     const newWeight = weight - learningRate * sensitivity * leftConnectedActivation
-                    console.log('updating w_' + w + n + '. weight was: ' + weight + '. new weight is: ' + newWeight)
+                    // console.log('updating w_' + w + n + '. weight was: ' + weight + '. new weight is: ' + newWeight)
                     this.weights[l - 1][n][w] = newWeight
                 }
             }
-            console.log('sensitivities: ')
-            console.log(sensitivities)
+            // console.log('sensitivities: ')
+            // console.log(sensitivities)
             previousSensitivities = sensitivities
             sensitivities = []
         }
 
         return
     }
-
 
     calculateError(output: Layer, label: Label) {
         if (output.length !== label.length) {
@@ -195,25 +198,26 @@ export class CNN {
         return JSON.parse(JSON.stringify(object))
     }
 
+    weightFileExists(weightFile: string): Boolean {
+        const path = 'weights/' + weightFile + '.json'
+        return existsSync(path)
+    }
 
+    readWeightFile(weightFile: string) {
+        const path = 'weights/' + weightFile + '.json'
+        const weightFileContent = readFileSync(path, { encoding: 'utf8' })
+        return JSON.parse(weightFileContent)
+    }
+
+    hasIdenticalDimensions(layers: number[]) {
+        return layers.length === this.layers.length && layers.every((l, i) => {
+            return l === this.layers[i]
+        })
+    }
+
+    writeWeights(weightFile: string) {
+        const path = 'weights/' + (weightFile || this.weightFile) + '.json'
+        const content = { layers: this.layers, weights: this.weights }
+        writeFileSync(path, JSON.stringify(content))
+    }
 }
-
-
-/*
-3 input to 5 neurons
-[[w11 w12 w13 w13 w14 w15], [w21 w22 w23 w24 w25], [w31 w32 w33 w34 w35]]
-5 neurons to 4 neurons
-[[w11 w12 w13 w13 w14], [w21 w22 w23 w24], [w31 w32 w33 w34], [w41 w42 w43 w44], [w51 w52 w53 w54]]
-4 neurons to 2 output
-[[w11 w12], [w21 w22], [w31 w32], [w41 w42]]
-
-
-input = 3
-layers = [5, 4]
-output = 2
-
-[3, 5, 5, 4, 4, 2]
-
-
-
-*/
