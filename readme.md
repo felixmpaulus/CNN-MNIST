@@ -1,13 +1,21 @@
-Building a basic NN from scratch. 
+## Building a basic NN from scratch. 
 Using 
 - https://zerowithdot.com/mlp-backpropagation/
-- https://blog.yani.ai/backpropagation/
-- https://brilliant.org/wiki/backpropagation/
+- https://blog.yani.ai/backpropagation/ (this one in particular)
+- https://brilliant.org/wiki/backpropagation/ (this one in particular)
 - https://hmkcode.com/ai/backpropagation-step-by-step/
 - https://machinelearningmastery.com/implement-backpropagation-algorithm-scratch-python/
 - http://neuralnetworksanddeeplearning.com/chap2.html
- as a guide.
+- https://home.agh.edu.pl/~vlsi/AI/backp_t_en/backprop.html
+as a guide.
 
 
-Visualization (not of this project):
+Debugging:
+- https://stats.stackexchange.com/questions/352036/what-should-i-do-when-my-neural-network-doesnt-learn
+
+
+## Visualization (not of this project):
 - http://playground.tensorflow.org/
+
+## other stuff
+- kaggle.com 

@@ -4,7 +4,10 @@ exports.CNN = void 0;
 const activation_1 = require("./activation");
 class CNN {
     constructor(inputSize, hiddenLayerSizes, outputSize, activation) {
-        this.weights = [];
+        this.weights = []; // notation: w_lij is weight i from neuron j in layer l 
+        // debug
+        this.errors = [];
+        this.outputs = [];
         console.log('input: ' + inputSize + ', hiddenLayers: ' + JSON.stringify(hiddenLayerSizes) + ', output: ' + outputSize);
         this.activation = activation_1.activationFunctions[activation];
         this.layers = [inputSize, ...hiddenLayerSizes, outputSize];
@@ -15,7 +18,7 @@ class CNN {
             for (let w = 0; w < weights; w++) {
                 const weightsForLayers = [];
                 for (let n = 0; n < neurons; n++) {
-                    weightsForLayers.push(Math.random());
+                    weightsForLayers.push(Math.round(Math.random() * 100) / 100);
                 }
                 weightsForNeuron.push(weightsForLayers);
             }
@@ -25,19 +28,22 @@ class CNN {
         console.log(this.weights);
     }
     detect(input) {
-        return this.calculateOutput(input);
+        const propagatedNetwork = this.propagate(input);
+        const outputLayer = propagatedNetwork[propagatedNetwork.length - 1];
+        return outputLayer;
     }
-    // we go from the back to the front
-    // final layer:
-    // we deriviate the full error function by one weight after another (all weights in total)
-    // d_Error / d_dotProduct_j * d_dotProduct_j / d_w_ij
-    // the partial derivative of a weight is the product of:
-    // error of node j in layer l * output of node i in layer l-1
-    // with the error
-    //  - beeing dependent of the values in the 'next' layer
-    //  - using the values after passing through the activation function
-    calculateOutput(input) {
-        let previousLayer = input.map(i => ({ activation: i }));
+    train(input, label, learningRate) {
+        const propagatedNetwork = this.propagate(input);
+        this.backpropagate(propagatedNetwork, label, learningRate);
+        const error = this.calculateError(propagatedNetwork[propagatedNetwork.length - 1], label);
+        this.errors.push(error);
+        const output = propagatedNetwork[propagatedNetwork.length - 1][0].activation;
+        this.outputs.push(output);
+        this.logAllValues(propagatedNetwork, label);
+    }
+    propagate(input) {
+        const inputAsStandardLayer = input.map(i => ({ activation: i }));
+        let previousLayer = inputAsStandardLayer;
         const initialNeuron = { dotProduct: undefined, activation: undefined };
         let hiddenLayers = this.layers.slice(1).map((l) => Array(l).fill(initialNeuron));
         hiddenLayers = hiddenLayers.map((layer, l) => {
@@ -50,13 +56,46 @@ class CNN {
             previousLayer = newLayer;
             return newLayer;
         });
-        this.logAllValues(input, hiddenLayers);
-        return hiddenLayers[hiddenLayers.length - 1];
+        return [inputAsStandardLayer, ...hiddenLayers];
     }
-    train(input, label, learningRate) {
-        const output = this.calculateOutput(input);
-        const error = this.calculateError(output, label);
-        console.log('output: ' + output.map(o => o.activation) + ', label: ' + label + ', error: ' + error);
+    backpropagate(propagatedNetwork, label, learningRate) {
+        let previousSensitivities = [];
+        const oldWeights = this.deepClone(this.weights);
+        for (let l = propagatedNetwork.length - 1; l >= 1; l--) {
+            console.log('propagating from layer: ' + l + ' to layer: ' + (l - 1));
+            const isOutputLayer = l == propagatedNetwork.length - 1;
+            const layer = propagatedNetwork[l];
+            const previousLayer = propagatedNetwork[l - 1];
+            let sensitivities = [];
+            for (let n = 0; n < layer.length; n++) {
+                console.log('looking at neuron: ' + n);
+                const neuron = layer[n];
+                const weightsToNeuron = oldWeights[l - 1][n];
+                const derivedActivation = this.activation.derivative(neuron.dotProduct);
+                let derivedError;
+                if (isOutputLayer) {
+                    derivedError = this.derivedError(neuron.activation, label[n]);
+                }
+                else {
+                    const weightsFromNeuron = oldWeights[l].reduce((p, m) => { return [...p, m[n]]; }, []);
+                    derivedError = previousSensitivities.reduce((p, s, i) => { return p + s * weightsFromNeuron[i]; }, 0);
+                }
+                let sensitivity = derivedError * derivedActivation;
+                sensitivities.push(sensitivity);
+                for (let w = 0; w < weightsToNeuron.length; w++) {
+                    const weight = weightsToNeuron[w];
+                    const { activation: leftConnectedActivation } = previousLayer[w];
+                    const newWeight = weight - learningRate * sensitivity * leftConnectedActivation;
+                    console.log('updating w_' + w + n + '. weight was: ' + weight + '. new weight is: ' + newWeight);
+                    this.weights[l - 1][n][w] = newWeight;
+                }
+            }
+            console.log('sensitivities: ');
+            console.log(sensitivities);
+            previousSensitivities = sensitivities;
+            sensitivities = [];
+        }
+        return;
     }
     calculateError(output, label) {
         if (output.length !== label.length) {
@@ -70,20 +109,11 @@ class CNN {
         }
         return squaredErrorSum / numberOfOutputs;
     }
-    // del_E / del_w_i
-    partialDerivativeErrorFinalLayer(real, desired, dotProduct, previousNode) {
-        const { activation } = previousNode;
-        return this.derivedError(real, desired, dotProduct) * activation;
-    }
-    // E
     halfSquaredError(real, desired) {
         return 0.5 * (Math.pow(real - desired, 2));
     }
-    // δ
-    derivedError(real, desired, dotProduct) {
-        return (real - desired) * this.activation.derivative(dotProduct);
-    }
-    partialDerivativeErrorHiddenLayer(real, desired, dotProduct, previousNode) {
+    derivedError(real, desired) {
+        return (real - desired);
     }
     dotProduct(weights, previousLayer) {
         if (weights.length !== previousLayer.length) {
@@ -103,14 +133,12 @@ class CNN {
             return Object.assign({ activation: (Math.exp(activation) / expsum) }, neuron);
         });
     }
-    logAllValues(input, hiddenLayers) {
-        let log = '';
-        const inputAsStandardLayer = input.map(i => ({ activation: i, dotProduct: undefined, error: undefined }));
-        const allLayers = [inputAsStandardLayer, ...hiddenLayers];
+    logAllValues(propagatedNetwork, label) {
+        let log = '\n\n- - - - - - - - - - -\nneuron activation values:\n';
         let i = 0;
         while (true) {
             let continueAdding = false;
-            allLayers.forEach((l) => {
+            propagatedNetwork.forEach((l) => {
                 const neuron = l[i];
                 log = log + (neuron ? (Math.round(neuron.activation * 100) / 100) : ' ') + '    ';
                 continueAdding = (continueAdding || !!neuron);
@@ -121,6 +149,12 @@ class CNN {
             i += 1;
         }
         console.log(log);
+        const outputLayer = propagatedNetwork[propagatedNetwork.length - 1];
+        const error = this.calculateError(outputLayer, label);
+        console.log('output: ' + outputLayer.map(o => Math.round(o.activation * 1000) / 1000) + ', \nlabel: ' + label + ', \nerror: ' + Math.round(error * 1000) / 1000 + '\n- - - - - - - - - - -\n\n');
+    }
+    deepClone(object) {
+        return JSON.parse(JSON.stringify(object));
     }
 }
 exports.CNN = CNN;

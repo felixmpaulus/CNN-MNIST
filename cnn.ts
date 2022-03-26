@@ -2,10 +2,22 @@ import { activationFunctions } from './activation';
 
 export class CNN {
 
-    // notation: w_lij is weight i from neuron j in layer l
+
     layers: number[]
-    weights: Weight[][][] = []
+    weights: Weight[][][] = [] // notation: w_lij is weight i from neuron j in layer l 
+    // weights = [
+    //     [
+    //         [0.33, 0.64, 0.95, 0.91],
+    //         [0.33, 0.73, 0.58, 0.05],
+    //         [0.4, 0.63, 0.64, 0.06],
+    //         [0.83, 0.75, 0.39, 0.33]
+    //     ],
+    //     [[0.88, 0.27, 0.44, 0.61]]
+    // ]
     activation: Activation
+    // debug
+    errors: number[] = []
+    outputs: number[] = []
 
     constructor(inputSize: number, hiddenLayerSizes: number[], outputSize: number, activation: ActivationType) {
         console.log('input: ' + inputSize + ', hiddenLayers: ' + JSON.stringify(hiddenLayerSizes) + ', output: ' + outputSize)
@@ -21,7 +33,7 @@ export class CNN {
             for (let w = 0; w < weights; w++) {
                 const weightsForLayers: Weight[] = []
                 for (let n = 0; n < neurons; n++) {
-                    weightsForLayers.push(Math.random())
+                    weightsForLayers.push(Math.round(Math.random() * 100) / 100)
                 }
                 weightsForNeuron.push(weightsForLayers)
             }
@@ -34,8 +46,20 @@ export class CNN {
     detect(input: InputLayer): Layer {
         const propagatedNetwork = this.propagate(input)
         const outputLayer = propagatedNetwork[propagatedNetwork.length - 1]
+
         return outputLayer
     }
+
+    train(input: InputLayer, label: Label, learningRate: number) {
+        const propagatedNetwork = this.propagate(input)
+        this.backpropagate(propagatedNetwork, label, learningRate)
+        const error = this.calculateError(propagatedNetwork[propagatedNetwork.length - 1], label)
+        this.errors.push(error)
+        const output = propagatedNetwork[propagatedNetwork.length - 1][0].activation
+        this.outputs.push(output)
+        this.logAllValues(propagatedNetwork, label)
+    }
+
 
     propagate(input: InputLayer): Layer[] {
         const inputAsStandardLayer = input.map(i => ({ activation: i }))
@@ -55,44 +79,54 @@ export class CNN {
             return newLayer
         })
 
-        this.logAllValues(input, hiddenLayers)
         return [inputAsStandardLayer, ...hiddenLayers]
     }
 
-    train(input: InputLayer, label: Label, learningRate: number) {
-        const propagatedNetwork = this.propagate(input)
-        for (let l = propagatedNetwork.length - 1; l > 1; l--) {
-            // iterate backwards through all weights
+    backpropagate(propagatedNetwork: Layer[], label: Label, learningRate: number) {
+        let previousSensitivities: number[] = []
+        const oldWeights: number[][][] = this.deepClone(this.weights)
+        for (let l = propagatedNetwork.length - 1; l >= 1; l--) {
+            console.log('propagating from layer: ' + l + ' to layer: ' + (l - 1))
+            const isOutputLayer = l == propagatedNetwork.length - 1
+            const layer = propagatedNetwork[l]
+            const previousLayer = propagatedNetwork[l - 1]
 
-            // output layer
-            // calculate the new weight by
-            // w = w - l dE/dw
-            // dE/dw = derived Error * derived activation(value) * output previous neuron(activation)
+            let sensitivities: number[] = []
+            for (let n = 0; n < layer.length; n++) {
+                console.log('looking at neuron: ' + n)
+                const neuron = layer[n]
+                const weightsToNeuron = oldWeights[l - 1][n]
 
-            // hidden layer 1
-            // calculate the new weight by
-            // w = w - l * dE/dw
-            // dE/dw = magic * derived activation(value) * output previous neuron(activation)
-            // magic = complete error function derived by the activation of the neuron the weight goes to
-            //         wich is calculated by the sum of all errors derived by the activation
+                const derivedActivation = this.activation.derivative(neuron.dotProduct)
 
-            // the del for a neuron in the previous layer del_j is calculated by
-            // sum over all neurons in the current layer:
-            //      the new weight going from the neuron the previous layer to the neuron
-            //      
-            //      the derived activation function of the neuron
+                let derivedError
+                if (isOutputLayer) {
+                    derivedError = this.derivedError(neuron.activation, label[n])
+                } else {
+                    const weightsFromNeuron = oldWeights[l].reduce((p, m) => { return [...p, m[n]] }, [])
+                    derivedError = previousSensitivities.reduce((p, s, i) => { return p + s * weightsFromNeuron[i] }, 0)
+                }
+
+                let sensitivity = derivedError * derivedActivation
+                sensitivities.push(sensitivity)
+
+                for (let w = 0; w < weightsToNeuron.length; w++) {
+                    const weight = weightsToNeuron[w]
+                    const { activation: leftConnectedActivation } = previousLayer[w]
+                    const newWeight = weight - learningRate * sensitivity * leftConnectedActivation
+                    console.log('updating w_' + w + n + '. weight was: ' + weight + '. new weight is: ' + newWeight)
+                    this.weights[l - 1][n][w] = newWeight
+                }
+            }
+            console.log('sensitivities: ')
+            console.log(sensitivities)
+            previousSensitivities = sensitivities
+            sensitivities = []
         }
 
-
-
-
-
-        const outputLayer = propagatedNetwork[propagatedNetwork.length - 1]
-        const error = this.calculateError(outputLayer, label)
-
-        console.log('output: ' + outputLayer.map(o => o.activation) + ', label: ' + label + ', error: ' + error)
-
+        return
     }
+
 
     calculateError(output: Layer, label: Label) {
         if (output.length !== label.length) {
@@ -135,14 +169,12 @@ export class CNN {
         })
     }
 
-    logAllValues(input: InputLayer, hiddenLayers: Layer[]) {
-        let log = ''
-        const inputAsStandardLayer: Layer = input.map(i => ({ activation: i, dotProduct: undefined, error: undefined }))
-        const allLayers: Layer[] = [inputAsStandardLayer, ...hiddenLayers]
+    logAllValues(propagatedNetwork: Layer[], label: Label) {
+        let log = '\n\n- - - - - - - - - - -\nneuron activation values:\n'
         let i = 0
         while (true) {
             let continueAdding: Boolean = false
-            allLayers.forEach((l: Layer) => {
+            propagatedNetwork.forEach((l: Layer) => {
                 const neuron = l[i]
                 log = log + (neuron ? (Math.round(neuron.activation * 100) / 100) : ' ') + '    '
                 continueAdding = (continueAdding || !!neuron)
@@ -152,7 +184,17 @@ export class CNN {
             i += 1
         }
         console.log(log)
+
+        const outputLayer = propagatedNetwork[propagatedNetwork.length - 1]
+        const error = this.calculateError(outputLayer, label)
+
+        console.log('output: ' + outputLayer.map(o => Math.round(o.activation * 1000) / 1000) + ', \nlabel: ' + label + ', \nerror: ' + Math.round(error * 1000) / 1000 + '\n- - - - - - - - - - -\n\n')
     }
+
+    deepClone(object: Object) {
+        return JSON.parse(JSON.stringify(object))
+    }
+
 
 }
 

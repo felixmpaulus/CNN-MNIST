@@ -24,50 +24,40 @@ function main() {
     ox
     xo
     
-    
-    
     */
     const testData = [
-        { input: [0, 0, 1, 1], label: [1] },
+        // { input: [0, 0, 1, 1], label: [1] },
         // { input: [1, 1, 0, 0], label: [1] },
         // { input: [1, 0, 1, 0], label: [1] },
-        // { input: [0, 1, 0, 1], label: [1] },
-        // { input: [1, 0, 0, 1], label: [0] },
+        { input: [0, 1, 0, 1], label: [1] },
+        { input: [1, 0, 0, 1], label: [0] },
         // { input: [0, 1, 1, 0], label: [0] }
     ];
-    // const MNISTasJSON = convertMNISTtoJSON()
     const MNISTCNN = new cnn_1.CNN(4, [4], 1, 'ReLU');
-    testData.forEach(({ input, label }) => {
-        MNISTCNN.train(input, label, 0.3);
-        // const output: Layer = MNISTCNN.calculateOutput(input)
-        // const error: number[] = MNISTCNN.calculateError(input)
-        // console.log(output.map(n => n.activation))
+    const multipleTestData = [...testData, ...testData, ...testData, ...testData, ...testData, ...testData, ...testData, ...testData, ...testData, ...testData, ...testData, ...testData, ...testData, ...testData, ...testData, ...testData, ...testData, ...testData, ...testData, ...testData, ...testData, ...testData, ...testData, ...testData, ...testData, ...testData, ...testData];
+    shuffle(multipleTestData).forEach(({ input, label }) => {
+        MNISTCNN.train(input, label, 0.1);
     });
-    // const input: Layer = [{ value: 3 }, { value: 6 }]
-    // console.log('output: ' + JSON.stringify(output))
-    // MNISTCNN.getWeights()
+    console.log('Weights: ');
+    console.log(MNISTCNN.weights);
+    console.log('Errors: ');
+    console.log(MNISTCNN.errors.join(',\n'));
+    console.log('Outputs: ');
+    console.log(MNISTCNN.outputs.join(',\n'));
+    const output1 = MNISTCNN.detect([1, 0, 0, 1]);
+    console.log('output1: ' + output1[0].activation);
+    const output2 = MNISTCNN.detect([0, 1, 0, 1]);
+    console.log('output2: ' + output2[0].activation);
+    function shuffle(array) {
+        let currentIndex = array.length, randomIndex;
+        while (currentIndex != 0) {
+            randomIndex = Math.floor(Math.random() * currentIndex);
+            currentIndex--;
+            [array[currentIndex], array[randomIndex]] = [
+                array[randomIndex], array[currentIndex]
+            ];
+        }
+        return array;
+    }
 }
-// function convertMNISTtoJSON() {
-//     var dataFileBuffer = fs.readFileSync(__dirname + '/MNIST/train-images-idx3-ubyte');
-//     var labelFileBuffer = fs.readFileSync(__dirname + '/MNIST/train-labels-idx1-ubyte');
-//     var pixelValues = [];
-//     for (var image = 0; image <= 59999; image++) {
-//         var pixels = [];
-//         for (var x = 0; x <= 27; x++) {
-//             for (var y = 0; y <= 27; y++) {
-//                 pixels.push(dataFileBuffer[(image * 28 * 28) + (x + (y * 28)) + 15]);
-//             }
-//         }
-//         var imageData = {};
-//         imageData[JSON.stringify(labelFileBuffer[image + 8])] = pixels;
-//         pixelValues.push(imageData);
-//     }
-//     // There are 28x28=784 pixel values, all varying from 0 to 255.
-//     // [
-//     //     { 5: [28, 0, 0, 0, 0, 0, 0, 0, 0, 0...] },
-//     //     { 0: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0...] },
-//     //     ...
-//     // ]
-//     return pixelValues
-// }
 //# sourceMappingURL=main.js.map
