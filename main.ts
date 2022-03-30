@@ -4,9 +4,11 @@ import { CNN } from "./cnn"
 main()
 
 function main() {
-    const weightFile = 'squares2'
-    const MNISTCNN = new CNN(4, [2], 1, 'ReLU', weightFile)
-
+    const weightFile: string | null = null // 'squares5'
+    const options: NNOptions = { activation: 'ReLU', weightOptions: { weightFile, lowerLimit: -0.25, higherLimit: 0.25 } }
+    const MNISTCNN = new CNN(2, [2], 1, options)
+    console.log('initial weights: ')
+    console.log(MNISTCNN.beautifyWeights(MNISTCNN.weights))
 
     const data4Squares = [
         { input: [0, 0, 1, 1], label: [1] },
@@ -23,10 +25,69 @@ function main() {
         { input: [1, 0], label: [1] },
         { input: [0, 0], label: [0] },]
 
-    // train(MNISTCNN, data4Squares, weightFile)
 
-    detect(MNISTCNN, data4Squares)
+    train(MNISTCNN, dataXOR, 250, 2, weightFile)
+
+
+    detect(MNISTCNN, dataXOR)
 }
+
+// 3 error -> 0
+// 2 error -> ?
+// 1 error -> {0, 0.5}
+
+// XOR
+
+// ReLU, l=0.3, w=[-0.25, 0.25]
+// 1111 ...
+// 3: 13x (43%)
+// 2: 4x  (14%)
+// 1: 13x (43%)
+
+// ReLU, l=0.3, w=[-0.5, 0.5]
+// 1111 ...
+// 3: 13x (43%)
+// 2: 4x  (14%)
+// 1: 13x (43%)
+
+// squares
+
+// ReLU, l=0.3, w=[0,1]
+// 1331332321 3311311111 2312333131 
+// 3: 13x (43%)
+// 2: 4x  (14%)
+// 1: 13x (43%)
+
+// ReLU, l=0.3, w=[0.5,1]
+// 1211111111 12111 ...
+// 3: 0x (0%)
+// 2: 2x (14%)
+// 1: 13x (86%)
+
+// ReLU, l=0.3, w=[0,0.5]
+// 2232323223 2222222222 2222322222
+// 3: 5x (16%)
+// 2: 25x (84%)
+// 1: 0x (0%)
+
+// ReLU, l=0.3, w=[-0.5,0.5]
+// 1331131133 1213131123 2131113321
+// 3: 11x (37%)
+// 2: 4x (13%)
+// 1: 15x (50%)
+
+// ReLU, l=0.3, w=[-1,0]
+// 3111131131 3111111111 1213111113
+// 3: 6x (20%)
+// 2: 1x (3%)
+// 1: 24x (77%)
+
+// ReLU, l=0.3, w=[-1,1]
+// 3321311311 1111111111 1111211111
+// 3: 4x (13%)
+// 2: 1x (3%)
+// 1: 25x (84%)
+
 
 function detect(network: any, data: any[]) {
     data.forEach(({ input, label }) => {
@@ -38,22 +99,20 @@ function detect(network: any, data: any[]) {
     })
 }
 
-function train(network: any, data: any[], weightFile: string) {
+function train(network: any, data: any[], dataMultiplier: number, learningRate: number, weightFile: string) {
 
-    const trainingData = shuffle(Array(100).fill(data).flat())
+    const trainingData = shuffle(Array(dataMultiplier).fill(data).flat())
 
     trainingData.forEach(({ input, label }) => {
-        network.train(input, label, 0.3)
+        network.train(input, label, learningRate)
     })
 
     console.log('Weights: ')
     console.log(network.weights)
     console.log('Errors: ')
     console.log(network.errors.join('\n'))
-    console.log('Outputs: ')
-    console.log(network.outputs.join('\n'))
 
-    network.writeWeights(weightFile)
+    network.writeWeightsToFile(weightFile)
 }
 
 function shuffle(array: any[]) {

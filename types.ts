@@ -12,3 +12,14 @@ type Activation = {
 }
 type ActivationType = 'ReLU'
 type Weight = number
+type Weights = Weight[][][]
+type NNOptions = {
+    activation: ActivationType,
+    weightOptions: WeightOptions,
+}
+type WeightOptions = {
+    weightFile?: string,
+    fixedWeights?: Weight[][][],
+    lowerLimit?: Weight,
+    higherLimit?: Weight,
+}
