@@ -10,16 +10,17 @@ type Activation = {
     primitive: (v: number) => number
     derivative: (v: number) => number
 }
-type ActivationType = 'ReLU'
+type ActivationType = 'ReLU' | 'leakyReLU' | 'sigmoid'
 type Weight = number
-type Weights = Weight[][][]
+type Bias = number
+type Weights = { weights: Weight[], bias: Bias }[][]
 type NNOptions = {
     activation: ActivationType,
     weightOptions: WeightOptions,
 }
 type WeightOptions = {
     weightFile?: string,
-    fixedWeights?: Weight[][][],
+    fixedWeights?: Weights,
     lowerLimit?: Weight,
     higherLimit?: Weight,
 }

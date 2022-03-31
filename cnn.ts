@@ -1,5 +1,5 @@
 import { activationFunctions } from './activation';
-import { stat, readFileSync, statSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 
 export class CNN {
     layers: number[]
@@ -31,7 +31,7 @@ export class CNN {
         // debug
         const error = this.calculateError(propagatedNetwork[propagatedNetwork.length - 1], label)
         this.errors.push(error)
-        this.logAllValues(propagatedNetwork, label)
+        // this.logAllValues(propagatedNetwork, label)
     }
 
     propagate(input: Layer): Layer[] {
@@ -71,19 +71,21 @@ export class CNN {
                 if (isOutputLayer) {
                     derivedError = this.derivedError(neuron.activation, label[n])
                 } else {
-                    const weightsFromNeuron = oldWeights[l].reduce((p, m) => { return [...p, m[n]] }, [])
+                    const weightsFromNeuron = oldWeights[l].reduce((p, m) => { return [...p, m.weights[n]] }, [])
                     derivedError = previousSensitivities.reduce((p, s, i) => { return p + s * weightsFromNeuron[i] }, 0)
                 }
 
                 let sensitivity = derivedError * derivedActivation
                 sensitivities.push(sensitivity)
 
-                const weightsToNeuron = oldWeights[l - 1][n]
+                const weightsToNeuron = oldWeights[l - 1][n].weights
+                const biasToNeuron = oldWeights[l - 1][n].bias
+                this.weights[l - 1][n].bias = biasToNeuron - learningRate * sensitivity
                 for (let w = 0; w < weightsToNeuron.length; w++) {
                     const weight = weightsToNeuron[w]
                     const { activation: leftConnectedActivation } = previousLayer[w]
                     const newWeight = weight - learningRate * sensitivity * leftConnectedActivation
-                    this.weights[l - 1][n][w] = newWeight
+                    this.weights[l - 1][n].weights[w] = newWeight
                 }
             }
             previousSensitivities = sensitivities
@@ -112,24 +114,17 @@ export class CNN {
         return (real - desired)
     }
 
-    dotProduct(weights: Weight[], previousLayer: Layer) {
+    dotProduct({ weights, bias }: { weights: Weight[], bias: Bias }, previousLayer: Layer) {
+
         if (weights.length !== previousLayer.length) {
             throw new Error('conflict at calculating next neuron value')
         }
         const numberOfWeights = weights.length
-        let dotProductSum = 0
+        let dotProductSum = bias
         for (let w = 0; w < numberOfWeights; w++) {
             dotProductSum += weights[w] * previousLayer[w].activation
         }
         return dotProductSum
-    }
-
-    softmax(layer: Layer): Layer {
-        const expsum = layer.reduce((i: number, { activation }: Neuron) => i + Math.exp(activation), 0)
-        return layer.map((neuron: Neuron) => {
-            const { activation } = neuron
-            return { activation: (Math.exp(activation) / expsum), ...neuron }
-        })
     }
 
     logAllValues(propagatedNetwork: Layer[], label: Label) {
@@ -174,9 +169,11 @@ export class CNN {
     }
 
     writeWeightsToFile(weightFile: string) {
-        const path = 'weights/' + (weightFile || this.weightFile) + '.json'
-        const content = { layers: this.layers, weights: this.weights }
-        writeFileSync(path, JSON.stringify(content))
+        if (weightFile || this.weightFile) {
+            const path = 'weights/' + (weightFile || this.weightFile) + '.json'
+            const content = { layers: this.layers, weights: this.weights }
+            writeFileSync(path, JSON.stringify(content))
+        }
     }
 
     getInitialWeights(weightOptions: WeightOptions): Weights {
@@ -202,19 +199,19 @@ export class CNN {
         if (lower >= higher || (typeof lower !== 'undefined' && (typeof higher === "undefined"))) {
             throw new Error('cant initialize weights')
         }
-        console.log(((higher || 1) - (lower || 0)) + (lower || 0))
         const layerDimensions = this.layers.reduce((p, l, i) => (this.layers[i + 1] ? [...p, [l, this.layers[i + 1]]] : p), [])
 
         const initialWeights: Weights = []
 
         layerDimensions.forEach(([neurons, weights]) => {
-            const weightsForLayers: Weight[][] = []
+            const weightsForLayers: { weights: Weight[], bias: Bias }[] = []
             for (let w = 0; w < weights; w++) {
 
-                const weightsToNeuron: Weight[] = []
+                const bias: Bias = Math.random() * ((higher || 1) - (lower || 0)) + (lower || 0)
+                const weightsToNeuron: { weights: Weight[], bias: Bias } = { weights: [], bias }
                 for (let n = 0; n < neurons; n++) {
                     const randomWeight = Math.random() * ((higher || 1) - (lower || 0)) + (lower || 0)
-                    weightsToNeuron.push(randomWeight)
+                    weightsToNeuron.weights.push(randomWeight)
                 }
                 weightsForLayers.push(weightsToNeuron)
             }
@@ -226,9 +223,12 @@ export class CNN {
     beautifyWeights(weights: Weights) {
         return weights.map(l => {
             return l.map(n => {
-                return n.map(w => {
-                    return Math.round(w * 100) / 100
-                })
+                return {
+                    weights: n.weights.map(w => {
+                        return Math.round(w * 100) / 100
+                    }),
+                    bias: Math.round(n.bias * 100) / 100
+                }
             })
         })
     }
