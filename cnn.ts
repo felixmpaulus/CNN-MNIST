@@ -1,9 +1,11 @@
 import { activationFunctions } from './activation';
 import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { moveMessagePortToContext } from 'worker_threads';
 
 export class CNN {
     layers: number[]
-    weights: Weights = [] // notation: w_lij is weight i from neuron j in layer l 
+    weights: Weights = [] // notation: w_lij is weight i from neuron j in layer l  
+    previousDeltaWeights: Weights = []
     activation: Activation
     weightFile: string
     // debug
@@ -14,6 +16,7 @@ export class CNN {
         this.activation = activationFunctions[activation]
         this.layers = [inputSize, ...hiddenLayerSizes, outputSize]
         this.weights = this.getInitialWeights(weightOptions)
+        this.previousDeltaWeights = this.getInitialWeights({ fixedWeight: 0 })
     }
 
     detect(input: InputLayer): Layer {
@@ -23,10 +26,10 @@ export class CNN {
         return outputLayer
     }
 
-    train(input: InputLayer, label: Label, learningRate: number) {
+    train(input: InputLayer, label: Label, learningRate: number, momentum: number) {
         const activatedInputs = input.map(i => ({ activation: this.activation.primitive(i) }))
         const propagatedNetwork = this.propagate(activatedInputs)
-        this.backpropagate(propagatedNetwork, label, learningRate)
+        this.backpropagate(propagatedNetwork, label, learningRate, momentum)
 
         // debug
         const error = this.calculateError(propagatedNetwork[propagatedNetwork.length - 1], label)
@@ -53,10 +56,9 @@ export class CNN {
         return [input, ...hiddenLayers]
     }
 
-    backpropagate(propagatedNetwork: Layer[], label: Label, learningRate: number) {
+    backpropagate(propagatedNetwork: Layer[], label: Label, learningRate: number, momentum: number) {
         let previousSensitivities: number[] = []
         const oldWeights: Weights = this.deepClone(this.weights)
-
         for (let l = propagatedNetwork.length - 1; l >= 1; l--) {
             const isOutputLayer = l == propagatedNetwork.length - 1
             const layer = propagatedNetwork[l]
@@ -80,11 +82,17 @@ export class CNN {
 
                 const weightsToNeuron = oldWeights[l - 1][n].weights
                 const biasToNeuron = oldWeights[l - 1][n].bias
-                this.weights[l - 1][n].bias = biasToNeuron - learningRate * sensitivity
+                const newBiasDeltaWeight = - learningRate * sensitivity
+                const previousBiasDeltaWeight = this.previousDeltaWeights[l - 1][n].bias
+                this.weights[l - 1][n].bias = biasToNeuron + newBiasDeltaWeight + momentum * previousBiasDeltaWeight
+
                 for (let w = 0; w < weightsToNeuron.length; w++) {
                     const weight = weightsToNeuron[w]
                     const { activation: leftConnectedActivation } = previousLayer[w]
-                    const newWeight = weight - learningRate * sensitivity * leftConnectedActivation
+                    const newDeltaWeight = - learningRate * sensitivity * leftConnectedActivation
+                    const previousDeltaWeight = this.previousDeltaWeights[l - 1][n].weights[w]
+                    const newWeight = weight + newDeltaWeight + momentum * previousDeltaWeight
+                    this.previousDeltaWeights[l - 1][n].weights[w] = newDeltaWeight
                     this.weights[l - 1][n].weights[w] = newWeight
                 }
             }
@@ -176,8 +184,8 @@ export class CNN {
         }
     }
 
-    getInitialWeights(weightOptions: WeightOptions): Weights {
-        const { weightFile, fixedWeights, lowerLimit, higherLimit } = weightOptions
+    getInitialWeights(weightOptions?: WeightOptions): Weights {
+        const { weightFile, fixedWeights, fixedWeight, lower, higher, biasLower, biasHigher } = weightOptions || {}
         this.weightFile = weightFile
         let initialWeights
         if (weightFile && this.weightFileExists(weightFile)) {
@@ -185,19 +193,25 @@ export class CNN {
             if (this.hasIdenticalDimensions(layers)) {
                 initialWeights = weights
             } else {
-                initialWeights = this.getRandomWeights(lowerLimit, higherLimit)
+                initialWeights = this.getRandomWeights({ lower, higher, biasLower, biasHigher })
             }
         } else if (fixedWeights) {
             initialWeights = fixedWeights
+        } else if (typeof fixedWeight !== 'undefined') {
+            initialWeights = this.getRandomWeights({ fixedWeight })
         } else {
-            initialWeights = this.getRandomWeights(lowerLimit, higherLimit)
+            initialWeights = this.getRandomWeights({ lower, higher, biasLower, biasHigher })
         }
         return initialWeights
     }
 
-    getRandomWeights(lower?: number, higher?: number): Weights {
+    getRandomWeights(weightOptions: WeightOptions): Weights {
+        const { fixedWeight, lower, higher, biasLower, biasHigher } = weightOptions
         if (lower >= higher || (typeof lower !== 'undefined' && (typeof higher === "undefined"))) {
-            throw new Error('cant initialize weights')
+            throw new Error('cant initialize normal weights')
+        }
+        if (biasLower >= biasHigher || (typeof biasLower !== 'undefined' && (typeof biasHigher === "undefined"))) {
+            throw new Error('cant initialize bias weights')
         }
         const layerDimensions = this.layers.reduce((p, l, i) => (this.layers[i + 1] ? [...p, [l, this.layers[i + 1]]] : p), [])
 
@@ -207,10 +221,10 @@ export class CNN {
             const weightsForLayers: { weights: Weight[], bias: Bias }[] = []
             for (let w = 0; w < weights; w++) {
 
-                const bias: Bias = Math.random() * ((higher || 1) - (lower || 0)) + (lower || 0)
+                const bias: Bias = typeof fixedWeight !== 'undefined' ? fixedWeight : Math.random() * ((biasHigher || 1) - (biasLower || 0)) + (biasLower || 0)
                 const weightsToNeuron: { weights: Weight[], bias: Bias } = { weights: [], bias }
                 for (let n = 0; n < neurons; n++) {
-                    const randomWeight = Math.random() * ((higher || 1) - (lower || 0)) + (lower || 0)
+                    const randomWeight = typeof fixedWeight !== 'undefined' ? fixedWeight : Math.random() * ((higher || 1) - (lower || 0)) + (lower || 0)
                     weightsToNeuron.weights.push(randomWeight)
                 }
                 weightsForLayers.push(weightsToNeuron)

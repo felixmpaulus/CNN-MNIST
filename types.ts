@@ -21,6 +21,9 @@ type NNOptions = {
 type WeightOptions = {
     weightFile?: string,
     fixedWeights?: Weights,
-    lowerLimit?: Weight,
-    higherLimit?: Weight,
+    fixedWeight?: number,
+    lower?: Weight,
+    higher?: Weight,
+    biasLower?: Weight,
+    biasHigher?: Weight,
 }

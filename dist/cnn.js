@@ -5,13 +5,15 @@ const activation_1 = require("./activation");
 const fs_1 = require("fs");
 class CNN {
     constructor(inputSize, hiddenLayerSizes, outputSize, options) {
-        this.weights = []; // notation: w_lij is weight i from neuron j in layer l 
+        this.weights = []; // notation: w_lij is weight i from neuron j in layer l  
+        this.previousDeltaWeights = [];
         // debug
         this.errors = [];
         const { activation, weightOptions } = options;
         this.activation = activation_1.activationFunctions[activation];
         this.layers = [inputSize, ...hiddenLayerSizes, outputSize];
         this.weights = this.getInitialWeights(weightOptions);
+        this.previousDeltaWeights = this.getInitialWeights({ fixedWeight: 0 });
     }
     detect(input) {
         const activatedInputs = input.map(i => ({ activation: this.activation.primitive(i) }));
@@ -19,14 +21,14 @@ class CNN {
         const outputLayer = propagatedNetwork[propagatedNetwork.length - 1];
         return outputLayer;
     }
-    train(input, label, learningRate) {
+    train(input, label, learningRate, momentum) {
         const activatedInputs = input.map(i => ({ activation: this.activation.primitive(i) }));
         const propagatedNetwork = this.propagate(activatedInputs);
-        this.backpropagate(propagatedNetwork, label, learningRate);
+        this.backpropagate(propagatedNetwork, label, learningRate, momentum);
         // debug
         const error = this.calculateError(propagatedNetwork[propagatedNetwork.length - 1], label);
         this.errors.push(error);
-        this.logAllValues(propagatedNetwork, label);
+        // this.logAllValues(propagatedNetwork, label)
     }
     propagate(input) {
         let previousLayer = input;
@@ -43,7 +45,7 @@ class CNN {
         });
         return [input, ...hiddenLayers];
     }
-    backpropagate(propagatedNetwork, label, learningRate) {
+    backpropagate(propagatedNetwork, label, learningRate, momentum) {
         let previousSensitivities = [];
         const oldWeights = this.deepClone(this.weights);
         for (let l = propagatedNetwork.length - 1; l >= 1; l--) {
@@ -59,17 +61,24 @@ class CNN {
                     derivedError = this.derivedError(neuron.activation, label[n]);
                 }
                 else {
-                    const weightsFromNeuron = oldWeights[l].reduce((p, m) => { return [...p, m[n]]; }, []);
+                    const weightsFromNeuron = oldWeights[l].reduce((p, m) => { return [...p, m.weights[n]]; }, []);
                     derivedError = previousSensitivities.reduce((p, s, i) => { return p + s * weightsFromNeuron[i]; }, 0);
                 }
                 let sensitivity = derivedError * derivedActivation;
                 sensitivities.push(sensitivity);
-                const weightsToNeuron = oldWeights[l - 1][n];
+                const weightsToNeuron = oldWeights[l - 1][n].weights;
+                const biasToNeuron = oldWeights[l - 1][n].bias;
+                const newBiasDeltaWeight = -learningRate * sensitivity;
+                const previousBiasDeltaWeight = this.previousDeltaWeights[l - 1][n].bias;
+                this.weights[l - 1][n].bias = biasToNeuron + newBiasDeltaWeight + momentum * previousBiasDeltaWeight;
                 for (let w = 0; w < weightsToNeuron.length; w++) {
                     const weight = weightsToNeuron[w];
                     const { activation: leftConnectedActivation } = previousLayer[w];
-                    const newWeight = weight - learningRate * sensitivity * leftConnectedActivation;
-                    this.weights[l - 1][n][w] = newWeight;
+                    const newDeltaWeight = -learningRate * sensitivity * leftConnectedActivation;
+                    const previousDeltaWeight = this.previousDeltaWeights[l - 1][n].weights[w];
+                    const newWeight = weight + newDeltaWeight + momentum * previousDeltaWeight;
+                    this.previousDeltaWeights[l - 1][n].weights[w] = newDeltaWeight;
+                    this.weights[l - 1][n].weights[w] = newWeight;
                 }
             }
             previousSensitivities = sensitivities;
@@ -94,23 +103,16 @@ class CNN {
     derivedError(real, desired) {
         return (real - desired);
     }
-    dotProduct(weights, previousLayer) {
+    dotProduct({ weights, bias }, previousLayer) {
         if (weights.length !== previousLayer.length) {
             throw new Error('conflict at calculating next neuron value');
         }
         const numberOfWeights = weights.length;
-        let dotProductSum = 0;
+        let dotProductSum = bias;
         for (let w = 0; w < numberOfWeights; w++) {
             dotProductSum += weights[w] * previousLayer[w].activation;
         }
         return dotProductSum;
-    }
-    softmax(layer) {
-        const expsum = layer.reduce((i, { activation }) => i + Math.exp(activation), 0);
-        return layer.map((neuron) => {
-            const { activation } = neuron;
-            return Object.assign({ activation: (Math.exp(activation) / expsum) }, neuron);
-        });
     }
     logAllValues(propagatedNetwork, label) {
         let log = '\n\n- - - - - - - - - - -\nneuron activation values:\n';
@@ -150,12 +152,14 @@ class CNN {
         });
     }
     writeWeightsToFile(weightFile) {
-        const path = 'weights/' + (weightFile || this.weightFile) + '.json';
-        const content = { layers: this.layers, weights: this.weights };
-        (0, fs_1.writeFileSync)(path, JSON.stringify(content));
+        if (weightFile || this.weightFile) {
+            const path = 'weights/' + (weightFile || this.weightFile) + '.json';
+            const content = { layers: this.layers, weights: this.weights };
+            (0, fs_1.writeFileSync)(path, JSON.stringify(content));
+        }
     }
     getInitialWeights(weightOptions) {
-        const { weightFile, fixedWeights, lowerLimit, higherLimit } = weightOptions;
+        const { weightFile, fixedWeights, fixedWeight, lower, higher, biasLower, biasHigher } = weightOptions || {};
         this.weightFile = weightFile;
         let initialWeights;
         if (weightFile && this.weightFileExists(weightFile)) {
@@ -164,31 +168,38 @@ class CNN {
                 initialWeights = weights;
             }
             else {
-                initialWeights = this.getRandomWeights(lowerLimit, higherLimit);
+                initialWeights = this.getRandomWeights({ lower, higher, biasLower, biasHigher });
             }
         }
         else if (fixedWeights) {
             initialWeights = fixedWeights;
         }
+        else if (typeof fixedWeight !== 'undefined') {
+            initialWeights = this.getRandomWeights({ fixedWeight });
+        }
         else {
-            initialWeights = this.getRandomWeights(lowerLimit, higherLimit);
+            initialWeights = this.getRandomWeights({ lower, higher, biasLower, biasHigher });
         }
         return initialWeights;
     }
-    getRandomWeights(lower, higher) {
+    getRandomWeights(weightOptions) {
+        const { fixedWeight, lower, higher, biasLower, biasHigher } = weightOptions;
         if (lower >= higher || (typeof lower !== 'undefined' && (typeof higher === "undefined"))) {
-            throw new Error('cant initialize weights');
+            throw new Error('cant initialize normal weights');
         }
-        console.log(((higher || 1) - (lower || 0)) + (lower || 0));
+        if (biasLower >= biasHigher || (typeof biasLower !== 'undefined' && (typeof biasHigher === "undefined"))) {
+            throw new Error('cant initialize bias weights');
+        }
         const layerDimensions = this.layers.reduce((p, l, i) => (this.layers[i + 1] ? [...p, [l, this.layers[i + 1]]] : p), []);
         const initialWeights = [];
         layerDimensions.forEach(([neurons, weights]) => {
             const weightsForLayers = [];
             for (let w = 0; w < weights; w++) {
-                const weightsToNeuron = [];
+                const bias = typeof fixedWeight !== 'undefined' ? fixedWeight : Math.random() * ((biasHigher || 1) - (biasLower || 0)) + (biasLower || 0);
+                const weightsToNeuron = { weights: [], bias };
                 for (let n = 0; n < neurons; n++) {
-                    const randomWeight = Math.random() * ((higher || 1) - (lower || 0)) + (lower || 0);
-                    weightsToNeuron.push(randomWeight);
+                    const randomWeight = typeof fixedWeight !== 'undefined' ? fixedWeight : Math.random() * ((higher || 1) - (lower || 0)) + (lower || 0);
+                    weightsToNeuron.weights.push(randomWeight);
                 }
                 weightsForLayers.push(weightsToNeuron);
             }
@@ -199,9 +210,12 @@ class CNN {
     beautifyWeights(weights) {
         return weights.map(l => {
             return l.map(n => {
-                return n.map(w => {
-                    return Math.round(w * 100) / 100;
-                });
+                return {
+                    weights: n.weights.map(w => {
+                        return Math.round(w * 100) / 100;
+                    }),
+                    bias: Math.round(n.bias * 100) / 100
+                };
             });
         });
     }

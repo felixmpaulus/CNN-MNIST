@@ -1,27 +1,31 @@
 import { deepStrictEqual } from "assert"
 import { CNN } from "./cnn"
 
-main()
-// mainRepeatedly()
+// main()
+mainRepeatedly()
 
-// function mainRepeatedly() {
-//     for (let i = 1; i < 31; i++) {
-//         console.log('\n' + i)
-//         main()
-//     }
-// }
+function mainRepeatedly() {
+    for (let i = 1; i < 31; i++) {
+        console.log('\n' + i)
+        main()
+    }
+}
 
 function main() {
-    const activation = 'leakyReLU'
-    const lowerLimit = 0
-    const higherLimit = 1
-    const learningRate = 0.01
+    const activation = 'sigmoid'
+    const lower = 0
+    const higher = 1
+    const biasLower = -0.5
+    const biasHigher = 0.5
+    const learningRate = 0.3
+    const momentum = 0.8
     const options: NNOptions = {
         activation: activation,
         weightOptions: {
-            lowerLimit, higherLimit
+            lower, higher, biasLower, biasHigher
         }
     }
+
     const MNISTCNN = new CNN(2, [2], 1, options)
     // console.log('initial weights: ')
     // console.log(JSON.stringify(MNISTCNN.beautifyWeights(MNISTCNN.weights)))
@@ -42,7 +46,7 @@ function main() {
         { input: [0, 0], label: [0] },]
 
 
-    train(MNISTCNN, dataXOR, 15000, learningRate)
+    train(MNISTCNN, dataXOR, 100000, learningRate, momentum)
     detect(MNISTCNN, dataXOR)
 }
 
@@ -57,18 +61,18 @@ function detect(network: any, data: any[]) {
     })
 }
 
-function train(network: any, data: any[], dataMultiplier: number, learningRate: number, weightFile?: string) {
+function train(network: any, data: any[], dataMultiplier: number, learningRate: number, monentum: number, weightFile?: string) {
 
     const trainingData = shuffle(Array(dataMultiplier).fill(data).flat())
 
     trainingData.forEach(({ input, label }) => {
-        network.train(input, label, learningRate)
+        network.train(input, label, learningRate, monentum)
     })
 
     // console.log('final weights: ')
     // console.log(JSON.stringify(network.beautifyWeights(network.weights)))
-    console.log('Errors: ')
-    console.log(network.errors.map((e: number) => e.toString().replace('.', ',')).join('\n'))
+    // console.log('Errors: ')
+    // console.log(network.errors.map((e: number) => e.toString().replace('.', ',')).join('\n'))
 
     network.writeWeightsToFile(weightFile)
 }
