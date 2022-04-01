@@ -1,7 +1,7 @@
-### Building a basic NN from scratch. 
+## Building a basic NN from scratch. 
 
 I am building a (convolutional) neural network from scratch to get a better understanding of the underlying fundamentals.
-#### Ressources
+### Ressources
 
 Using 
 - https://zerowithdot.com/mlp-backpropagation/ (this one in particular)
@@ -21,7 +21,7 @@ determining network size
 - https://stats.stackexchange.com/questions/181/how-to-choose-the-number-of-hidden-layers-and-nodes-in-a-feedforward-neural-netw
 
 
-#### Architecture
+### Architecture
 
 - the network uses classic backpropagation and biases for each neuron.
 - the final error is calculated using the mean square error formular.
@@ -32,7 +32,7 @@ determining network size
     - implement momentum (see this answer)[https://stackoverflow.com/a/9372629/8179042]
     - different weight intervals for bias weights and normal weights
 
-#### XOR
+### XOR
 - the network consists of 2 Input, 1 hidden Layer with 2 Neurons and one Output.
 
 **Examining the network**
@@ -92,8 +92,8 @@ The settings that resulted in the lowest non-convergence rate were the following
 
 
 
-## Visualization (not of this project):
+### Visualization (not of this project):
 - http://playground.tensorflow.org/
 
-## other stuff
+### other stuff
 - kaggle.com 
