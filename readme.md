@@ -1,5 +1,6 @@
 ### Building a basic NN from scratch. 
 
+I am building a (convolutional) neural network from scratch to get a better understanding of the underlying fundamentals.
 #### Ressources
 
 Using 
@@ -20,8 +21,19 @@ determining network size
 - https://stats.stackexchange.com/questions/181/how-to-choose-the-number-of-hidden-layers-and-nodes-in-a-feedforward-neural-netw
 
 
+#### Architecture
+
+- the network uses classic backpropagation and biases for each neuron.
+- the final error is calculated using the mean square error formular.
+- so far sigmoid, ReLU und leaky ReLU are implemented as activation functions.
+
+- Ideas:
+    - different activation for hidden and output neurons
+    - implement momentum (see this answer)[https://stackoverflow.com/a/9372629/8179042]
+    - different weight intervals for bias weights and normal weights
+
 #### XOR
-Network consists of 2 Input, 1 hidden Layer with 2 Neurons and one Output.
+- the network consists of 2 Input, 1 hidden Layer with 2 Neurons and one Output.
 
 **Examining the network**
 - non-convergence rate is examined by the following parameters

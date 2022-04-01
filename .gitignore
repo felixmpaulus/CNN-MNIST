@@ -1,3 +1,4 @@
 /node_modules
 /weights
 /dist
+.DS_Store
